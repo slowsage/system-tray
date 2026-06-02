@@ -571,7 +571,8 @@ impl Client {
                         sleep(LAYOUT_UPDATE_INTERVAL_MS).await;
                         if *last_layout_update.lock().expect("should get lock") == now {
                             trace!("dispatching layout update");
-                            layout_tx.send(args.parent).await.expect("should send");
+                            // receiver gone => watch loop exited; nothing to dispatch
+                            let _ = layout_tx.send(args.parent).await;
                         }
                     });
                 }
