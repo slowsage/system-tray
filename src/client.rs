@@ -218,11 +218,14 @@ impl Client {
             });
         }
 
-        // Handle other watchers unregistering and this one taking over
-        // It is necessary to clear all items as our watcher will then re-send them all
+        // On taking over the watcher name: clear items (we re-send them) and
+        // re-register our host, since the earlier registration landed on the
+        // previous owner and would otherwise leave IsStatusNotifierHostRegistered false.
         {
             let tx = tx.clone();
             let items = items.clone();
+            let connection = connection.clone();
+            let wellknown = wellknown.clone();
 
             let dbus_proxy = DBusProxy::new(&connection).await?;
 
@@ -234,6 +237,20 @@ impl Client {
                     if body.name == names::WATCHER_BUS {
                         for dest in items.clear_items() {
                             tx.send(Event::Remove(dest))?;
+                        }
+
+                        match StatusNotifierWatcherProxy::new(&connection).await {
+                            Ok(watcher_proxy) => {
+                                if let Err(e) = watcher_proxy
+                                    .register_status_notifier_host(&wellknown)
+                                    .await
+                                {
+                                    error!("failed to re-register host after watcher takeover: {e:?}");
+                                }
+                            }
+                            Err(e) => {
+                                error!("failed to open watcher proxy after takeover: {e:?}");
+                            }
                         }
                     }
                 }
